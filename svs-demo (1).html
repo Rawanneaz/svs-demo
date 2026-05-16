@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>SVS — Sector Vulnerability Scanner</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Bebas+Neue&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#03060d;--bg2:#070d1a;--panel:#0a1120;--border:#162035;--border2:#1e2e48;--accent:#00d4ff;--accent-dim:rgba(0,212,255,0.12);--accent2:#ff4d6d;--warn:#ffb830;--ok:#00e5a0;--text:#b8cce0;--dim:#3a5070;--mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;--display:'Bebas Neue',sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;min-height:100vh;overflow-x:hidden}
+body::after{content:'';position:fixed;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.35;animation:scanline 5s linear infinite;pointer-events:none;z-index:999}
+@keyframes scanline{0%{top:-2px}100%{top:100vh}}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,255,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.022) 1px,transparent 1px);background-size:50px 50px;pointer-events:none;z-index:0}
+.wrap{position:relative;z-index:1;max-width:860px;margin:0 auto;padding:20px 14px 80px}
+
+/* HEADER */
+.hdr{border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:20px}
+.hdr-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.eyebrow{font-size:9px;letter-spacing:4px;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
+h1{font-family:var(--display);font-size:clamp(32px,8vw,58px);line-height:1;color:#fff;letter-spacing:2px}
+h1 .ac{color:var(--accent)}
+.tagline{font-family:var(--sans);font-size:11px;color:var(--dim);margin-top:5px;font-weight:300;letter-spacing:.3px;max-width:440px;line-height:1.5}
+.live-pill{display:flex;align-items:center;gap:7px;background:rgba(0,229,160,.07);border:1px solid rgba(0,229,160,.25);padding:7px 14px;font-size:9px;color:var(--ok);letter-spacing:3px;text-transform:uppercase;white-space:nowrap;flex-shrink:0;align-self:flex-start;margin-top:4px}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--ok);animation:blink 1.8s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* CASE BANNER */
+.case-banner{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent2);padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.case-label{font-size:9px;letter-spacing:3px;color:var(--accent2);text-transform:uppercase;margin-bottom:3px}
+.case-title{font-family:var(--sans);font-size:14px;font-weight:700;color:#fff}
+.case-stats{display:flex;gap:20px;flex-wrap:wrap}
+.cs-val{font-family:var(--display);font-size:22px;color:var(--accent2);line-height:1}
+.cs-lbl{font-size:9px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-top:2px}
+
+/* SECTORS */
+.section-label{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--dim);margin-bottom:10px}
+.sector-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}
+.sbtn{background:var(--panel);border:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:10px;padding:8px 14px;cursor:pointer;letter-spacing:1.5px;text-transform:uppercase;transition:all .18s;user-select:none}
+.sbtn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+.sbtn.active{background:var(--accent);border-color:var(--accent);color:#000;font-weight:700}
+
+/* SCAN BUTTON */
+.scan-btn{width:100%;padding:18px;background:transparent;border:1px solid var(--accent);color:var(--accent);font-family:var(--display);font-size:22px;letter-spacing:6px;cursor:pointer;position:relative;overflow:hidden;transition:color .25s;margin-bottom:24px;display:block}
+.scan-btn::before{content:'';position:absolute;inset:0;background:var(--accent);transform:scaleX(0);transform-origin:left;transition:transform .28s ease;z-index:0}
+.scan-btn:hover::before{transform:scaleX(1)}
+.scan-btn:hover{color:#000}
+.scan-btn span{position:relative;z-index:1}
+.scan-btn:disabled{border-color:var(--dim);color:var(--dim);cursor:default}
+.scan-btn:disabled::before{transform:scaleX(0)!important}
+.scan-btn:disabled:hover{color:var(--dim)}
+
+/* PROGRESS */
+.prog-area{display:none;margin-bottom:22px}
+.prog-area.show{display:block}
+.prog-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.prog-status{font-size:10px;color:var(--accent);letter-spacing:2px;text-transform:uppercase}
+.prog-pct{font-family:var(--display);font-size:18px;color:var(--accent)}
+.prog-track{height:3px;background:var(--border);overflow:hidden;margin-bottom:6px}
+.prog-bar{height:100%;background:linear-gradient(90deg,var(--accent),#80f0ff);width:0%;transition:width .15s linear;position:relative}
+.prog-bar::after{content:'';position:absolute;right:-8px;top:-3px;width:3px;height:9px;background:rgba(255,255,255,.9);filter:blur(1px)}
+.prog-sub{font-size:10px;color:var(--dim);letter-spacing:1px}
+
+/* AGENTS */
+.agents-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+@media(max-width:580px){.agents-grid{grid-template-columns:1fr}}
+.agent-card{background:var(--panel);border:1px solid var(--border);padding:14px;position:relative;overflow:hidden;transition:border-color .3s}
+.agent-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--accent);transform:scaleX(0);transform-origin:left;transition:transform .6s ease}
+.agent-card.running{border-color:var(--accent)}
+.agent-card.running::after{transform:scaleX(1)}
+.agent-card.done{border-color:var(--ok)}
+.agent-card.done::after{background:var(--ok);transform:scaleX(1)}
+.agent-card.running::before{content:'';position:absolute;top:0;left:-60%;width:50%;height:100%;background:linear-gradient(90deg,transparent,rgba(0,212,255,.05),transparent);animation:shim 1.5s linear infinite}
+@keyframes shim{to{left:120%}}
+.a-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.a-icon{width:30px;height:30px;background:var(--bg2);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:14px}
+.a-status{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);transition:color .3s}
+.a-status.running{color:var(--accent)}
+.a-status.done{color:var(--ok)}
+.a-name{font-family:var(--display);font-size:20px;color:#fff;letter-spacing:1px;line-height:1;margin-bottom:3px}
+.a-desc{font-size:9px;color:var(--dim);line-height:1.5;margin-bottom:10px;letter-spacing:.3px}
+.a-sources{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+.a-src-tag{font-size:8px;padding:3px 7px;background:var(--bg2);border:1px solid var(--border2);color:var(--dim);letter-spacing:1px;text-transform:uppercase}
+.a-score-label{font-size:9px;color:var(--dim);letter-spacing:2px;text-transform:uppercase;margin-bottom:5px}
+.a-track{height:3px;background:var(--border);overflow:hidden;margin-bottom:8px}
+.a-fill{height:100%;width:0%;transition:width 1s cubic-bezier(.4,0,.2,1)}
+.a-score-num{font-family:var(--display);font-size:32px;color:#fff;line-height:1;transition:color .5s}
+.a-weight{font-size:9px;color:var(--dim);margin-top:2px;letter-spacing:1px}
+
+/* TERMINAL */
+.terminal{background:var(--bg2);border:1px solid var(--border);margin-bottom:22px;overflow:hidden}
+.term-bar{background:var(--panel);border-bottom:1px solid var(--border);padding:8px 14px;display:flex;align-items:center;gap:8px;font-size:9px;color:var(--dim);letter-spacing:2px;text-transform:uppercase}
+.term-dots{display:flex;gap:5px}
+.term-dot{width:7px;height:7px;border-radius:50%}
+.td1{background:#ff5f57}.td2{background:#febc2e}.td3{background:#28c840}
+.term-body{padding:12px 14px;max-height:160px;overflow-y:auto;font-size:11px;line-height:2}
+.term-body::-webkit-scrollbar{width:2px}
+.term-body::-webkit-scrollbar-thumb{background:var(--border2)}
+.tl{animation:tlfade .25s ease forwards;opacity:0}
+@keyframes tlfade{to{opacity:1}}
+.tl .t{color:var(--dim);font-size:10px}
+.tl .ok{color:var(--ok)}
+.tl .warn{color:var(--warn)}
+.tl .err{color:var(--accent2)}
+.tl .hi{color:var(--accent)}
+.tl .al{color:var(--accent2);font-weight:700}
+.cursor{display:inline-block;width:7px;height:11px;background:var(--accent);vertical-align:middle;animation:cur 1s step-end infinite}
+@keyframes cur{50%{opacity:0}}
+
+/* RESULTS */
+.results{display:none}
+.results.show{display:block;animation:rfade .5s ease forwards}
+@keyframes rfade{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.results-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap}
+.results-title{font-family:var(--display);font-size:28px;color:#fff;letter-spacing:2px}
+.risk-pill{padding:8px 20px;font-family:var(--display);font-size:18px;letter-spacing:3px;border:1px solid}
+.risk-low{color:var(--ok);border-color:var(--ok);background:rgba(0,229,160,.08)}
+.risk-med{color:var(--warn);border-color:var(--warn);background:rgba(255,184,48,.08)}
+.risk-high{color:var(--accent2);border-color:var(--accent2);background:rgba(255,77,109,.1)}
+
+/* COMPOSITE */
+.composite{background:var(--panel);border:1px solid var(--border);padding:20px 24px;margin-bottom:14px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+.big-num{font-family:var(--display);font-size:clamp(56px,12vw,84px);line-height:1;transition:color .6s;flex-shrink:0}
+.composite-meta{flex:1;min-width:180px}
+.comp-label{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+.comp-formula{font-size:10px;color:var(--dim);margin-bottom:10px;font-style:italic}
+.comp-formula span{color:var(--text)}
+.gauge-track{height:6px;background:var(--border);overflow:hidden;margin-bottom:6px;position:relative}
+.gauge-fill{height:100%;width:0%;transition:width 1.4s cubic-bezier(.4,0,.2,1)}
+.gauge-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent);animation:gsh 2s linear infinite}
+@keyframes gsh{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.gauge-labels{display:flex;justify-content:space-between;font-size:8px;color:var(--dim);letter-spacing:1px}
+.threshold-line{font-size:11px;color:var(--warn);margin-top:10px;letter-spacing:.5px}
+
+/* BREAKDOWN */
+.breakdown{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+@media(max-width:580px){.breakdown{grid-template-columns:1fr}}
+.bdown-card{background:var(--panel);border:1px solid var(--border);padding:14px}
+.bd-label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+.bd-score{font-family:var(--display);font-size:36px;line-height:1;margin-bottom:3px}
+.bd-weight{font-size:9px;color:var(--dim);letter-spacing:1px}
+.bd-contrib{font-size:10px;color:var(--text);margin-top:6px}
+
+/* ALERT BOX */
+.alert-box{background:rgba(255,77,109,.06);border:1px solid var(--accent2);padding:16px;display:flex;gap:14px;align-items:flex-start;margin-bottom:14px}
+.ab-icon{font-size:20px;flex-shrink:0}
+.ab-title{font-family:var(--display);font-size:18px;color:var(--accent2);letter-spacing:1px;margin-bottom:4px}
+.ab-text{font-family:var(--sans);font-size:12px;color:var(--text);line-height:1.6;font-weight:300}
+.ab-text strong{color:#fff}
+
+/* CHART */
+.mini-chart{background:var(--panel);border:1px solid var(--border);padding:16px;margin-bottom:14px}
+.chart-title{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--dim);margin-bottom:12px}
+#svs-chart{width:100%;height:120px;display:block}
+
+/* VAR */
+.var-card{background:var(--panel);border:1px solid var(--border);padding:20px;margin-bottom:14px}
+.var-title{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--dim);margin-bottom:16px}
+.var-bars{display:flex;gap:20px;align-items:flex-end;height:100px;margin-bottom:10px}
+.var-bar-wrap{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1}
+.var-bar{width:100%;background:var(--border2);position:relative;transition:height 1.2s cubic-bezier(.4,0,.2,1);height:0}
+.var-bar-val{font-family:var(--display);font-size:16px;position:absolute;top:0;margin-top:-22px}
+.var-bar-lbl{font-size:9px;color:var(--dim);letter-spacing:1px;text-align:center;text-transform:uppercase}
+.bar-nosv{background:rgba(255,77,109,.6)}
+.bar-sv{background:rgba(0,229,160,.7)}
+.var-arrow{display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:28px;color:var(--ok);padding-bottom:24px}
+.var-note{font-size:10px;color:var(--dim);text-align:center;letter-spacing:.5px}
+
+/* FINDINGS */
+.findings{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--warn);padding:16px;margin-bottom:14px}
+.findings-label{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--warn);margin-bottom:12px}
+.fi{display:flex;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);align-items:flex-start}
+.fi:last-child{border-bottom:none}
+.fi-dot{color:var(--warn);font-size:12px;flex-shrink:0;margin-top:1px}
+.fi-text{font-family:var(--sans);font-size:12px;color:var(--text);line-height:1.5;font-weight:300}
+.fi-text strong{color:#fff;font-weight:600}
+
+/* FOOTER */
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.footer-left{font-size:9px;color:var(--dim);letter-spacing:1.5px;text-transform:uppercase;line-height:1.8}
+.footer-left .ac{color:var(--accent)}
+.reset-btn{background:transparent;border:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;padding:8px 16px;cursor:pointer;transition:all .2s;margin-top:20px}
+.reset-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-top">
+    <div>
+      <div class="eyebrow">▸ Live Interactive Demo · JRC-26 · Hassan II University</div>
+      <h1><span class="ac">SVS</span> SCANNER</h1>
+      <div class="tagline">Sector Vulnerability Scanner · Multi-Agent AI Early Warning System<br>Predicting AI-Induced Market Collapse Through Labor Market Intelligence</div>
+    </div>
+    <div class="live-pill"><div class="live-dot"></div>System online</div>
+  </div>
+</div>
+
+<!-- CASE BANNER -->
+<div class="case-banner">
+  <div>
+    <div class="case-label">▸ Active Case Study</div>
+    <div class="case-title">SaaSPocalypse 2026 — AI-Induced SaaS Sector Collapse</div>
+  </div>
+  <div class="case-stats">
+    <div><div class="cs-val">$2T</div><div class="cs-lbl">Market erased</div></div>
+    <div><div class="cs-val">−15.4%</div><div class="cs-lbl">IGV ETF drop</div></div>
+    <div><div class="cs-val">65 days</div><div class="cs-lbl">Early warning lead</div></div>
+    <div><div class="cs-val">0</div><div class="cs-lbl">Basel IV categories matched</div></div>
+  </div>
+</div>
+
+<!-- SECTOR -->
+<div class="section-label">▸ Select target sector for analysis</div>
+<div class="sector-row" id="sectorRow">
+  <button class="sbtn active" data-s="saas">SaaS / Software</button>
+  <button class="sbtn" data-s="fintech">Fintech</button>
+  <button class="sbtn" data-s="healthcare">Healthcare AI</button>
+  <button class="sbtn" data-s="logistics">Logistics</button>
+  <button class="sbtn" data-s="media">Media / Content</button>
+</div>
+
+<!-- SCAN -->
+<button class="scan-btn" id="scanBtn" onclick="startScan()"><span>▶ INITIATE SVS SCAN</span></button>
+
+<!-- PROGRESS -->
+<div class="prog-area" id="progArea">
+  <div class="prog-header">
+    <div class="prog-status" id="progStatus">Initializing...</div>
+    <div class="prog-pct" id="progPct">0%</div>
+  </div>
+  <div class="prog-track"><div class="prog-bar" id="progBar"></div></div>
+  <div class="prog-sub" id="progSub">Connecting to data streams...</div>
+</div>
+
+<!-- AGENTS -->
+<div class="agents-grid">
+  <div class="agent-card" id="cL">
+    <div class="a-top"><div class="a-icon">👷</div><div class="a-status" id="sL">IDLE</div></div>
+    <div class="a-name">LABOR</div>
+    <div class="a-desc">Detects workforce displacement signals preceding market collapse</div>
+    <div class="a-sources"><span class="a-src-tag">Google Trends</span><span class="a-src-tag">Job postings</span><span class="a-src-tag">LinkedIn</span></div>
+    <div class="a-score-label">S_labor · w₁ = 40%</div>
+    <div class="a-track"><div class="a-fill" id="fL" style="background:var(--accent)"></div></div>
+    <div class="a-score-num" id="nL">—</div>
+    <div class="a-weight">Pearson r = −0.985 · p&lt;0.001</div>
+  </div>
+  <div class="agent-card" id="cD">
+    <div class="a-top"><div class="a-icon">📄</div><div class="a-status" id="sD">IDLE</div></div>
+    <div class="a-name">DOCUMENT</div>
+    <div class="a-desc">LLM-scores SEC 10-K filings for AI disruption language density</div>
+    <div class="a-sources"><span class="a-src-tag">SEC 10-K</span><span class="a-src-tag">FinBERT</span><span class="a-src-tag">NLP</span></div>
+    <div class="a-score-label">S_doc · w₂ = 35%</div>
+    <div class="a-track"><div class="a-fill" id="fD" style="background:var(--warn)"></div></div>
+    <div class="a-score-num" id="nD">—</div>
+    <div class="a-weight">Filing sentiment shift detection</div>
+  </div>
+  <div class="agent-card" id="cM">
+    <div class="a-top"><div class="a-icon">📈</div><div class="a-status" id="sM">IDLE</div></div>
+    <div class="a-name">MARKET</div>
+    <div class="a-desc">Monitors Yahoo Finance IGV ETF & sector volatility patterns</div>
+    <div class="a-sources"><span class="a-src-tag">Yahoo Finance</span><span class="a-src-tag">IGV ETF</span><span class="a-src-tag">VaR</span></div>
+    <div class="a-score-label">S_market · w₃ = 25%</div>
+    <div class="a-track"><div class="a-fill" id="fM" style="background:var(--accent2)"></div></div>
+    <div class="a-score-num" id="nM">—</div>
+    <div class="a-weight">Volatility regime · GARCH(1,1)</div>
+  </div>
+</div>
+
+<!-- TERMINAL -->
+<div class="terminal">
+  <div class="term-bar">
+    <div class="term-dots"><div class="term-dot td1"></div><div class="term-dot td2"></div><div class="term-dot td3"></div></div>
+    svs-engine v2.6 — live output
+  </div>
+  <div class="term-body" id="termBody">
+    <div class="tl"><span class="t">[00:00:00]</span> SVS System initialized. Awaiting scan command... <span class="cursor"></span></div>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<div class="results" id="results">
+  <div class="results-hdr">
+    <div class="results-title">ANALYSIS COMPLETE</div>
+    <div class="risk-pill" id="riskPill">—</div>
+  </div>
+
+  <div class="composite">
+    <div class="big-num" id="bigScore">—</div>
+    <div class="composite-meta">
+      <div class="comp-label">SVS Composite Score</div>
+      <div class="comp-formula">SVS = <span>S_labor × w₁ + S_doc × w₂ + S_market × w₃</span></div>
+      <div class="gauge-track"><div class="gauge-fill" id="gaugeFill"></div></div>
+      <div class="gauge-labels"><span>0 — SAFE</span><span>θ = 4.8</span><span>10 — CRITICAL</span></div>
+      <div class="threshold-line" id="threshLine"></div>
+    </div>
+  </div>
+
+  <div class="breakdown">
+    <div class="bdown-card">
+      <div class="bd-label">Labor Agent</div>
+      <div class="bd-score" id="bdL" style="color:var(--accent)">—</div>
+      <div class="bd-weight">w₁ = 40%</div>
+      <div class="bd-contrib" id="bdLC">—</div>
+    </div>
+    <div class="bdown-card">
+      <div class="bd-label">Document Agent</div>
+      <div class="bd-score" id="bdD" style="color:var(--warn)">—</div>
+      <div class="bd-weight">w₂ = 35%</div>
+      <div class="bd-contrib" id="bdDC">—</div>
+    </div>
+    <div class="bdown-card">
+      <div class="bd-label">Market Agent</div>
+      <div class="bd-score" id="bdM" style="color:var(--accent2)">—</div>
+      <div class="bd-weight">w₃ = 25%</div>
+      <div class="bd-contrib" id="bdMC">—</div>
+    </div>
+  </div>
+
+  <div id="alertBox" class="alert-box" style="display:none">
+    <div class="ab-icon">⚠</div>
+    <div>
+      <div class="ab-title" id="alertTitle">ALERT TRIGGERED</div>
+      <div class="ab-text" id="alertText">—</div>
+    </div>
+  </div>
+
+  <div class="mini-chart">
+    <div class="chart-title">▸ SVS Score Evolution — 90-day window leading to event</div>
+    <canvas id="svs-chart"></canvas>
+  </div>
+
+  <div class="var-card">
+    <div class="var-title">▸ Basel IV Pillar 2 — VaR Reduction with SVS Active</div>
+    <div class="var-bars">
+      <div class="var-bar-wrap">
+        <div class="var-bar bar-nosv" id="barA" style="height:0"><div class="var-bar-val" style="color:var(--accent2)" id="barAVal">14.7%</div></div>
+        <div class="var-bar-lbl">Without SVS</div>
+      </div>
+      <div class="var-arrow">→</div>
+      <div class="var-bar-wrap">
+        <div class="var-bar bar-sv" id="barB" style="height:0"><div class="var-bar-val" style="color:var(--ok)" id="barBVal">6.0%</div></div>
+        <div class="var-bar-lbl">With SVS</div>
+      </div>
+    </div>
+    <div class="var-note" id="varNote">95% VaR · Basel IV Pillar 2 stress-test protocols</div>
+  </div>
+
+  <div class="findings">
+    <div class="findings-label">▸ Key Findings — SaaSPocalypse 2026</div>
+    <div class="fi"><div class="fi-dot">▸</div><div class="fi-text"><strong>65-day early warning</strong> — Labor signals preceded the $2T collapse by 65 days (r=−0.985, p&lt;0.001). SVS triggered alert at θ=4.8 before losses materialized.</div></div>
+    <div class="fi"><div class="fi-dot">▸</div><div class="fi-text"><strong>New 5th systemic risk category</strong> — AI Disruption Risk was <em>absent</em> from Basel IV. The IGV ETF collapsed 15.4%, yet matched zero existing risk categories.</div></div>
+    <div class="fi"><div class="fi-dot">▸</div><div class="fi-text"><strong>VaR reduction −59%</strong> — SVS-triggered portfolio rebalancing reduces 95% VaR from <strong>14.7% → 6.0%</strong>, consistent with Basel IV Pillar 2 stress-test protocols.</div></div>
+  </div>
+
+  <button class="reset-btn" onclick="resetScan()">↺ Reset — Run New Scan</button>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <div class="footer-left">
+    <span class="ac">Rawane Azeroual · Abdelaziz Marzak · Rachida Ait Abdelouahid</span><br>
+    Faculty of Sciences Ben M'Sick · Hassan II University · Casablanca, Morocco<br>
+    LTIM Laboratory · JRC-26 Conference 2026
+  </div>
+</div>
+
+</div>
+<script>
+const SECTORS={saas:{s1:5.1,s2:4.2,s3:6.8,vb:14.7,va:6.0},fintech:{s1:4.8,s2:3.7,s3:5.2,vb:12.4,va:5.8},healthcare:{s1:3.9,s2:5.1,s3:4.4,vb:9.2,va:5.1},logistics:{s1:4.2,s2:3.2,s3:4.9,vb:10.8,va:5.5},media:{s1:5.8,s2:4.9,s3:5.5,vb:13.6,va:6.2}};
+const W1=0.40,W2=0.35,W3=0.25,THETA=4.8;
+let active='saas',scanning=false;
+
+document.querySelectorAll('.sbtn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    if(scanning)return;
+    document.querySelectorAll('.sbtn').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');active=b.dataset.s;
+  });
+});
+
+function ts(){return new Date().toTimeString().slice(0,8)}
+function log(html,delay=0){
+  const body=document.getElementById('termBody');
+  setTimeout(()=>{
+    const d=document.createElement('div');d.className='tl';
+    d.innerHTML=`<span class="t">[${ts()}]</span> ${html}`;
+    body.appendChild(d);body.scrollTop=body.scrollHeight;
+  },delay);
+}
+function clearLog(){document.getElementById('termBody').innerHTML='';}
+
+function setAgent(which,state,score){
+  const card=document.getElementById('c'+which);
+  const stat=document.getElementById('s'+which);
+  const fill=document.getElementById('f'+which);
+  const num=document.getElementById('n'+which);
+  card.classList.remove('running','done');
+  stat.classList.remove('running','done');
+  stat.style.color='';
+  if(state==='running'){card.classList.add('running');stat.textContent='SCANNING';stat.classList.add('running');}
+  else if(state==='done'){card.classList.add('done');stat.textContent='DONE';stat.classList.add('done');}
+  else{stat.textContent='IDLE';}
+  if(score!=null){num.textContent=score.toFixed(1);fill.style.width=Math.min((score/10)*100,100)+'%';}
+}
+
+function setP(pct,status,sub){
+  document.getElementById('progBar').style.width=pct+'%';
+  document.getElementById('progPct').textContent=pct+'%';
+  document.getElementById('progStatus').textContent=status;
+  document.getElementById('progSub').textContent=sub;
+}
+
+function startScan(){
+  if(scanning)return;scanning=true;
+  document.getElementById('scanBtn').disabled=true;
+  const res=document.getElementById('results');
+  res.classList.remove('show');res.style.display='none';
+  document.getElementById('alertBox').style.display='none';
+  clearLog();
+  const d=SECTORS[active];
+  const sName=document.querySelector('.sbtn.active').textContent;
+  ['L','D','M'].forEach(x=>setAgent(x,'idle'));
+  document.getElementById('progArea').classList.add('show');
+  setP(0,'Initializing...','Connecting to data streams...');
+
+  log('<span class="hi">SVS</span> Scan initiated → Sector: <span class="hi">'+sName+'</span>',0);
+  log('Loading Basel IV threshold · θ = <span class="warn">'+THETA+'</span>',300);
+  log('Pipeline: Labor(40%) → Document(35%) → Market(25%)',600);
+
+  setTimeout(()=>{
+    setP(10,'Labor Agent scanning...','Google Trends & job displacement signals...');
+    setAgent('L','running');
+    log('━━━ <span class="hi">LABOR AGENT</span> activated ━━━',0);
+    log('Google Trends: "AI replaces developers" +340% spike detected',400);
+    log('LinkedIn job postings: Software roles −28% YoY',800);
+    log('Lead-lag correlation: r = <span class="warn">−0.985</span>, p&lt;0.001',1200);
+  },1200);
+
+  setTimeout(()=>{
+    setAgent('L','done',d.s1);
+    setP(33,'Document Agent scanning...','Parsing SEC 10-K filings...');
+    log('<span class="ok">✓ LABOR</span> complete · S_labor=<span class="ok">'+d.s1.toFixed(1)+'</span> · contrib='+(d.s1*W1).toFixed(2),0);
+    log('━━━ <span class="warn">DOCUMENT AGENT</span> activated ━━━',400);
+    setAgent('D','running');
+    log('Fetching SEC EDGAR: Q4 2025 10-K batch (23 entities)...',800);
+    log('LLM scoring: FinBERT + ensemble pipeline...',1200);
+    log('AI disruption language density: <span class="warn">+187% above baseline</span>',1600);
+  },3600);
+
+  setTimeout(()=>{
+    setAgent('D','done',d.s2);
+    setP(66,'Market Agent scanning...','IGV ETF & VaR metrics...');
+    log('<span class="ok">✓ DOCUMENT</span> complete · S_doc=<span class="ok">'+d.s2.toFixed(1)+'</span> · contrib='+(d.s2*W2).toFixed(2),0);
+    log('━━━ <span class="err">MARKET AGENT</span> activated ━━━',400);
+    setAgent('M','running');
+    log('Yahoo Finance: IGV ETF 180-day window...',800);
+    log('GARCH(1,1) volatility model fit...',1200);
+    log('VaR(95%) = <span class="err">'+d.vb+'%</span> · Regime: ELEVATED',1600);
+  },6800);
+
+  setTimeout(()=>{
+    setAgent('M','done',d.s3);
+    const svs=d.s1*W1+d.s2*W2+d.s3*W3;
+    setP(90,'Computing SVS Composite Score...','Aggregating weighted signals...');
+    log('<span class="ok">✓ MARKET</span> complete · S_market=<span class="ok">'+d.s3.toFixed(1)+'</span> · contrib='+(d.s3*W3).toFixed(2),0);
+    log('SVS = '+d.s1+'×0.40 + '+d.s2+'×0.35 + '+d.s3+'×0.25 = <span class="warn">'+svs.toFixed(2)+'</span>',600);
+  },10200);
+
+  setTimeout(()=>{
+    const svs=d.s1*W1+d.s2*W2+d.s3*W3;
+    setP(100,'Complete.','');
+    if(svs>=THETA){
+      log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',0);
+      log('<span class="al">⚠ SVS='+svs.toFixed(2)+' ≥ θ='+THETA+' → ALERT TRIGGERED</span>',200);
+      log('<span class="err">Basel IV Pillar 2 protective response ACTIVATED</span>',500);
+      log('<span class="warn">VaR reduction: '+d.vb+'% → '+d.va+'%</span>',800);
+    }else{
+      log('SVS='+svs.toFixed(2)+' < θ='+THETA+' → <span class="ok">SAFE ZONE</span>',0);
+      log('<span class="ok">No Basel IV escalation required</span>',400);
+    }
+    setTimeout(()=>{
+      document.getElementById('progArea').classList.remove('show');
+      showResults(d,svs,sName);
+      scanning=false;
+      document.getElementById('scanBtn').disabled=false;
+    },1800);
+  },12800);
+}
+
+function showResults(d,svs,sName){
+  const res=document.getElementById('results');
+  res.style.display='block';res.classList.add('show');
+  const isAlert=svs>=THETA;
+
+  const pill=document.getElementById('riskPill');
+  if(svs>=7){pill.textContent='HIGH RISK';pill.className='risk-pill risk-high';}
+  else if(isAlert){pill.textContent='ALERT';pill.className='risk-pill risk-med';}
+  else{pill.textContent='SAFE';pill.className='risk-pill risk-low';}
+
+  const bs=document.getElementById('bigScore');
+  bs.textContent=svs.toFixed(2);
+  bs.style.color=svs>=7?'var(--accent2)':isAlert?'var(--warn)':'var(--ok)';
+
+  const gf=document.getElementById('gaugeFill');
+  gf.style.background=svs>=7?'var(--accent2)':isAlert?'var(--warn)':'var(--ok)';
+  setTimeout(()=>{gf.style.width=Math.min((svs/10)*100,100)+'%';},100);
+
+  document.getElementById('threshLine').textContent=
+    isAlert?'⚠ SVS '+svs.toFixed(2)+' ≥ θ '+THETA+' — Basel IV Pillar 2 escalation TRIGGERED'
+           :'✓ SVS '+svs.toFixed(2)+' < θ '+THETA+' — No escalation required';
+
+  document.getElementById('bdL').textContent=d.s1.toFixed(1);
+  document.getElementById('bdD').textContent=d.s2.toFixed(1);
+  document.getElementById('bdM').textContent=d.s3.toFixed(1);
+  document.getElementById('bdLC').textContent='Contributes '+(d.s1*W1).toFixed(2)+' to SVS';
+  document.getElementById('bdDC').textContent='Contributes '+(d.s2*W2).toFixed(2)+' to SVS';
+  document.getElementById('bdMC').textContent='Contributes '+(d.s3*W3).toFixed(2)+' to SVS';
+
+  if(isAlert){
+    const ab=document.getElementById('alertBox');ab.style.display='flex';
+    document.getElementById('alertTitle').textContent=svs>=7?'CRITICAL ALERT':'ALERT TRIGGERED';
+    document.getElementById('alertText').innerHTML='<strong>SVS = '+svs.toFixed(2)+'</strong> exceeded Basel IV threshold θ = '+THETA+'. In the SaaSPocalypse 2026 case, this signal appeared <strong>65 days before</strong> the $2T market collapse. Portfolio rebalancing triggered: 95% VaR <strong>'+d.vb+'% → '+d.va+'%</strong>.';
+  }
+
+  setTimeout(()=>{
+    const maxH=76;
+    document.getElementById('barA').style.height=maxH+'px';
+    document.getElementById('barB').style.height=(maxH*d.va/d.vb)+'px';
+    document.getElementById('barAVal').textContent=d.vb+'%';
+    document.getElementById('barBVal').textContent=d.va+'%';
+    document.getElementById('varNote').textContent='95% VaR: '+d.vb+'% → '+d.va+'% · Reduction: '+Math.round((1-d.va/d.vb)*100)+'% · Basel IV Pillar 2 protocols';
+  },200);
+
+  drawChart(d,svs);
+}
+
+function drawChart(d,svs){
+  const canvas=document.getElementById('svs-chart');
+  const ctx=canvas.getContext('2d');
+  const rect=canvas.getBoundingClientRect();
+  canvas.width=rect.width*window.devicePixelRatio;
+  canvas.height=120*window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio,window.devicePixelRatio);
+  const W=rect.width,H=120;
+  const pad={t:14,r:14,b:24,l:32};
+  const cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;
+  const pts=90;
+  const vals=[];
+  for(let i=0;i<pts;i++){
+    const prog=i/pts;
+    const base=1.8+prog*(svs-1.8)*1.05;
+    vals.push(Math.max(0.5,Math.min(10,base+(Math.random()-.5)*.7)));
+  }
+  vals[pts-1]=svs;
+  const toX=i=>pad.l+(i/(pts-1))*cW;
+  const toY=v=>pad.t+(1-v/10)*cH;
+
+  // threshold
+  ctx.strokeStyle='rgba(255,184,48,.3)';ctx.lineWidth=1;ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(pad.l,toY(THETA));ctx.lineTo(W-pad.r,toY(THETA));ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='rgba(255,184,48,.65)';ctx.font='9px IBM Plex Mono';
+  ctx.fillText('θ=4.8',pad.l+2,toY(THETA)-3);
+
+  // gradient fill
+  const grad=ctx.createLinearGradient(0,pad.t,0,pad.t+cH);
+  grad.addColorStop(0,'rgba(0,212,255,.15)');grad.addColorStop(1,'rgba(0,212,255,0)');
+  ctx.beginPath();ctx.moveTo(toX(0),toY(vals[0]));
+  for(let i=1;i<pts;i++)ctx.lineTo(toX(i),toY(vals[i]));
+  ctx.lineTo(toX(pts-1),pad.t+cH);ctx.lineTo(toX(0),pad.t+cH);ctx.closePath();
+  ctx.fillStyle=grad;ctx.fill();
+
+  // line
+  ctx.beginPath();ctx.strokeStyle='rgba(0,212,255,.85)';ctx.lineWidth=1.5;
+  ctx.moveTo(toX(0),toY(vals[0]));
+  for(let i=1;i<pts;i++)ctx.lineTo(toX(i),toY(vals[i]));
+  ctx.stroke();
+
+  // alert dot
+  const ai=Math.floor(pts*.73);
+  ctx.beginPath();ctx.arc(toX(ai),toY(vals[ai]),4,0,Math.PI*2);
+  ctx.fillStyle='var(--warn)';ctx.fill();
+  ctx.fillStyle='rgba(255,184,48,.85)';ctx.font='9px IBM Plex Mono';
+  ctx.fillText('ALERT',toX(ai)+8,toY(vals[ai])+3);
+
+  // end dot
+  ctx.beginPath();ctx.arc(toX(pts-1),toY(svs),5,0,Math.PI*2);
+  ctx.fillStyle=svs>=THETA?'var(--accent2)':'var(--ok)';ctx.fill();
+
+  // axis labels
+  ctx.fillStyle='rgba(58,80,112,.9)';ctx.font='9px IBM Plex Mono';
+  ctx.fillText('−90d',pad.l,H-6);
+  ctx.fillText('−45d',pad.l+cW/2-12,H-6);
+  ctx.fillText('Event',W-pad.r-28,H-6);
+}
+
+function resetScan(){
+  const res=document.getElementById('results');
+  res.classList.remove('show');res.style.display='none';
+  document.getElementById('alertBox').style.display='none';
+  document.getElementById('progArea').classList.remove('show');
+  ['L','D','M'].forEach(x=>setAgent(x,'idle'));
+  clearLog();
+  const d=document.createElement('div');d.className='tl';
+  d.innerHTML=`<span class="t">[${ts()}]</span> SVS System reset. Awaiting scan command... <span class="cursor"></span>`;
+  document.getElementById('termBody').appendChild(d);
+}
+</script>
+</body>
+</html>
